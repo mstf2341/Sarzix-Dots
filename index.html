@@ -3,40 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SARZIX Dots - Leaderboard</title>
+    <title>SARZIX Dots</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        :root { --bg: #0b1015; --p1: #00ff88; --p2: #ff3366; --empty: #2c3e50; --gold: #ffd700; }
-        body { background: var(--bg); color: white; font-family: 'Cairo', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #0b1015; --p1: #00ff88; --p2: #ff3366; --empty: #2c3e50; }
+        body { background: var(--bg); color: white; font-family: 'Cairo', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
         .screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        input { padding: 15px; margin: 10px; border-radius: 10px; border: 1px solid #444; background: #1a1f25; color: white; width: 80%; text-align: center; }
+        input { padding: 15px; margin: 10px; border-radius: 10px; border: 1px solid #444; background: #1a1f25; color: white; width: 80%; text-align: center; font-size: 1.1rem; }
         .btn { background: var(--p1); color: #000; padding: 12px 30px; border-radius: 10px; font-weight: bold; cursor: pointer; border: none; }
-        
-        /* قائمة المتصدرين */
-        #leaderboard-btn { position: fixed; right: 10px; top: 10px; background: var(--gold); color: black; padding: 8px; border-radius: 5px; font-size: 0.8rem; cursor: pointer; z-index: 150; font-weight: bold; }
-        #leaderboard-panel { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200; display: none; flex-direction: column; align-items: center; padding-top: 50px; }
-        .leader-item { display: flex; justify-content: space-between; width: 80%; padding: 10px; border-bottom: 1px solid #333; }
-
         .scoreboard { display: flex; width: 100%; justify-content: space-around; padding: 15px 0; background: #161b22; border-bottom: 2px solid #333; position: relative; }
         .score { font-size: 2.2rem; font-weight: bold; }
-        #dice-box { width: 70px; height: 70px; background: white; color: black; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 10px auto; cursor: pointer; }
+        #reset-area { position: absolute; top: 60px; display: flex; gap: 5px; z-index: 10; }
+        .mini-btn { font-size: 0.7rem; padding: 4px 8px; border-radius: 5px; cursor: pointer; background: #333; color: #fff; border: 1px solid #555; }
+        #dice-box { width: 70px; height: 70px; background: white; color: black; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 10px auto; cursor: pointer; box-shadow: 0 0 15px rgba(255,255,255,0.2); }
         #game-board { position: relative; background: #161b22; border-radius: 15px; padding: 10px; display: none; margin-top: 25px;}
         .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; position: absolute; z-index: 10; }
         .line { position: absolute; background: var(--empty); cursor: pointer; z-index: 5; }
         .box { position: absolute; z-index: 1; opacity: 0.8; }
         #win-screen { display: none; z-index: 200; text-align: center; }
+        .popup { background: #1a1f25; border: 2px solid var(--p1); padding: 10px; border-radius: 10px; position: absolute; top: 75px; z-index: 150; display: none; flex-direction: column; align-items: center; box-shadow: 0 5px 20px black; }
     </style>
 </head>
 <body>
-
-    <div id="leaderboard-btn" onclick="showLeaderboard()">🏆 المتصدرين</div>
-
-    <div id="leaderboard-panel">
-        <h2 style="color: var(--gold)">أفضل 10 لاعبين</h2>
-        <div id="leader-list" style="width: 100%; display: flex; flex-direction: column; align-items: center;"></div>
-        <button class="btn" style="margin-top: 20px" onclick="document.getElementById('leaderboard-panel').style.display='none'">إغلاق</button>
-    </div>
 
     <div id="login-screen" class="screen">
         <h1 style="color: var(--p1)">SARZIX Dots</h1>
@@ -46,23 +35,31 @@
     </div>
 
     <div id="wait-screen" class="screen" style="display:none;">
-        <h2 id="wait-msg">بانتظار الخصم..</h2>
+        <h2 id="wait-msg">في انتظار الخصم..</h2>
         <button id="ready-btn" class="btn" onclick="ready()" style="display:none; background: #ffc107;">أنا مستعد!</button>
     </div>
 
     <div id="game-ui" style="display:none; width: 100%;">
         <div class="scoreboard">
             <div><div id="label-p1" style="color:var(--p1)">-</div><div class="score" id="s1">0</div></div>
-            <div id="dice-box" onclick="roll()">🎲</div>
+            <div id="reset-area"><div id="req-btn" class="mini-btn" onclick="sendReset()">🔄 طلب إعادة</div></div>
+            <div id="confirm-pop" class="popup">
+                <span style="font-size: 0.8rem; margin-bottom: 5px;">الخصم يطلب إعادة؟</span>
+                <div style="display:flex; gap:10px;">
+                    <button class="mini-btn" style="background:var(--p1); color:black;" onclick="ansReset(true)">موافق</button>
+                    <button class="mini-btn" style="background:var(--p2);" onclick="ansReset(false)">رفض</button>
+                </div>
+            </div>
             <div><div id="label-p2" style="color:var(--p2)">-</div><div class="score" id="s2">0</div></div>
         </div>
+        <div id="dice-box" onclick="roll()">🎲</div>
         <p id="m-text" style="text-align:center;">بانتظار الحركة..</p>
         <div id="game-board" style="margin: auto;"></div>
     </div>
 
     <div id="win-screen" class="screen">
         <h1 style="color: var(--p1)">SARZIX Dots</h1>
-        <h2 id="w-text">🎉</h2>
+        <h2 id="w-text" style="color: gold;">🎉</h2>
         <p id="f-score"></p>
         <button class="btn" onclick="location.reload()">العودة للرئيسية 🔄</button>
     </div>
@@ -80,9 +77,7 @@
         firebase.initializeApp(firebaseConfig);
         const rdb = firebase.database();
 
-        let myName, roomID, myRole, turn = 1, movesLeft = 0, scores={1:0,2:0}, total=0, over=false;
-        let myUID = localStorage.getItem('dots_uid') || "U" + Math.floor(Math.random()*9000+1000);
-        localStorage.setItem('dots_uid', myUID);
+        let myName, roomID, myRole, turn = 1, moves = 0, scores={1:0,2:0}, total=0, over=false;
 
         function join() {
             myName = document.getElementById('u-name').value;
@@ -91,9 +86,9 @@
             const ref = rdb.ref('rooms/' + roomID);
             ref.once('value', s => {
                 const d = s.val();
-                if(!d) { myRole = 1; ref.set({p1: myName, p1UID: myUID, p1R: false}); }
-                else if(!d.p2 && d.p1UID !== myUID) { myRole = 2; ref.update({p2: myName, p2UID: myUID, p2R: false}); }
-                else { myRole = (d.p1UID === myUID) ? 1 : 2; }
+                if(!d) { myRole = 1; ref.set({p1: myName, p1R: false}); }
+                else if(!d.p2 && d.p1 !== myName) { myRole = 2; ref.update({p2: myName, p2R: false}); }
+                else { myRole = (d.p1 === myName) ? 1 : 2; }
                 document.getElementById('login-screen').style.display='none';
                 document.getElementById('wait-screen').style.display='flex';
                 listen();
@@ -114,26 +109,15 @@
                 if(a.type === 'dice') applyDice(a);
                 else if(a.type === 'line') applyLine(a);
                 else if(a.type === 'swap') applySwap(a);
+                else if(a.type === 'reset_req' && a.p !== myRole) document.getElementById('confirm-pop').style.display='flex';
+                else if(a.type === 'reset_ok') location.reload();
             });
         }
 
-        function showLeaderboard() {
-            document.getElementById('leaderboard-panel').style.display = 'flex';
-            rdb.ref('leaderboard').orderByValue().limitToLast(10).once('value', s => {
-                const list = document.getElementById('leader-list');
-                list.innerHTML = '';
-                let items = [];
-                s.forEach(child => { items.push({name: child.key, wins: child.val()}); });
-                items.reverse().forEach((item, idx) => {
-                    list.innerHTML += `<div class="leader-item"><span>${idx+1}. ${item.name}</span><span>${item.wins} فوز</span></div>`;
-                });
-            });
-        }
+        function sendReset() { rdb.ref('actions/' + roomID).push({type:'reset_req', p:myRole}); document.getElementById('req-btn').innerText='طلب معلق..'; }
+        function ansReset(ok) { if(ok) rdb.ref('actions/' + roomID).push({type:'reset_ok'}); else document.getElementById('confirm-pop').style.display='none'; }
 
-        function ready() {
-            rdb.ref('rooms/' + roomID).update({ [`p${myRole}R`]: true });
-            document.getElementById('ready-btn').style.display='none';
-        }
+        function ready() { rdb.ref('rooms/' + roomID).update({[`p${myRole}R`]:true}); document.getElementById('ready-btn').style.display='none'; }
 
         function start(d) {
             document.getElementById('wait-screen').style.display='none';
@@ -141,25 +125,25 @@
             document.getElementById('game-board').style.display='block';
             document.getElementById('label-p1').innerText = d.p1;
             document.getElementById('label-p2').innerText = d.p2;
-            initBoard(); updateUI();
+            init(); updateUI();
         }
 
         function roll() {
-            if(turn !== myRole || movesLeft > 0 || over) return;
-            let r = Math.floor(Math.random() * 7); 
-            rdb.ref('actions/' + roomID).push({ player: myRole, type: 'dice', val: r });
+            if(turn !== myRole || moves > 0 || over) return;
+            let r = Math.floor(Math.random()*7);
+            rdb.ref('actions/' + roomID).push({player:myRole, type:'dice', val:r});
         }
 
         function applyDice(a) {
-            movesLeft = a.val;
-            document.getElementById('dice-box').innerText = movesLeft;
-            if(movesLeft === 0 && myRole === a.player && !over) {
-                setTimeout(() => rdb.ref('actions/' + roomID).push({ type: 'swap', next: a.player === 1 ? 2 : 1 }), 800);
+            moves = a.val; document.getElementById('dice-box').innerText = moves;
+            document.getElementById('m-text').innerText = `دور ${a.player===1?'الأخضر':'الأحمر'} (${moves})`;
+            if(moves===0 && myRole===a.player && !over) {
+                setTimeout(()=> rdb.ref('actions/' + roomID).push({type:'swap', next:a.player===1?2:1}), 800);
             }
             updateUI();
         }
 
-        function initBoard() {
+        function init() {
             const b = document.getElementById('game-board'); const sz = 55;
             b.innerHTML = ''; b.style.width = 5*sz+20+"px"; b.style.height = 5*sz+20+"px";
             for(let r=0; r<6; r++) {
@@ -177,11 +161,7 @@
             if(t==='h'){ l.style.width=sz+"px"; l.style.height="8px"; l.style.top=r1*sz+1+"px"; l.style.left=c1*sz+6+"px"; }
             else { l.style.width="8px"; l.style.height=sz+"px"; l.style.top=r1*sz+6+"px"; l.style.left=c1*sz+1+"px"; }
             l.id = id;
-            l.onclick = () => {
-                if(turn === myRole && movesLeft > 0 && !l.dataset.taken && !over) {
-                    rdb.ref('actions/' + roomID).push({ player: myRole, type: 'line', id, r1, c1, r2, c2, t });
-                }
-            };
+            l.onclick = () => { if(turn===myRole && moves>0 && !l.dataset.taken && !over) rdb.ref('actions/'+roomID).push({player:myRole, type:'line', id, r1, c1, r2, c2, t}); };
             document.getElementById('game-board').appendChild(l);
         }
 
@@ -189,20 +169,13 @@
             const l = document.getElementById(a.id);
             if(!l || l.dataset.taken) return;
             l.dataset.taken = "true";
-            l.style.background = a.player === 1 ? 'var(--p1)' : 'var(--p2)';
-            if(turn === a.player) movesLeft--;
+            l.style.background = a.player===1 ? 'var(--p1)' : 'var(--p2)';
+            if(turn===a.player) moves--;
             checkSq(a.r1, a.c1, a.r2, a.c2, a.t, a.player);
-            if(!over && movesLeft === 0 && myRole === a.player) {
-                rdb.ref('actions/' + roomID).push({ type: 'swap', next: a.player === 1 ? 2 : 1 });
-            }
+            if(!over && moves===0 && myRole===a.player) rdb.ref('actions/'+roomID).push({type:'swap', next:a.player===1?2:1});
         }
 
-        function applySwap(a) {
-            if(over) return;
-            turn = a.next; movesLeft = 0;
-            document.getElementById('dice-box').innerText = "🎲";
-            updateUI();
-        }
+        function applySwap(a) { if(over) return; turn=a.next; moves=0; document.getElementById('dice-box').innerText="🎲"; updateUI(); }
 
         function checkSq(r1,c1,r2,c2,t,pId) {
             const sz=55, poss = (t==='h')?[[r1-1,c1],[r1,c1]]:[[r1,c1-1],[r1,c1]];
@@ -213,35 +186,28 @@
                     if(tL?.dataset.taken && bL?.dataset.taken && lL?.dataset.taken && rL?.dataset.taken && !document.getElementById(`box-${r}-${c}`)) {
                         const box = document.createElement('div'); box.id=`box-${r}-${c}`; box.className='box';
                         box.style.width=sz-4+"px"; box.style.height=sz-4+"px"; box.style.top=r*sz+8+"px"; box.style.left=c*sz+8+"px";
-                        box.style.background = pId === 1 ? 'var(--p1)' : 'var(--p2)';
+                        box.style.background = pId===1 ? 'var(--p1)' : 'var(--p2)';
                         document.getElementById('game-board').appendChild(box);
                         scores[pId]++; total++;
-                        document.getElementById('s1').innerText=scores[1];
-                        document.getElementById('s2').innerText=scores[2];
-                        if(total >= 25) { over = true; movesLeft = 0; finish(); }
+                        document.getElementById('s1').innerText=scores[1]; document.getElementById('s2').innerText=scores[2];
+                        if(total>=25) { over=true; moves=0; setTimeout(finish, 500); }
                     }
                 }
             });
         }
 
         function updateUI() {
-            const isMy = (turn === myRole);
+            const isMy = (turn===myRole);
             document.getElementById('status').innerText = isMy ? "دورك!" : "انتظر..";
             document.getElementById('dice-box').style.opacity = isMy ? "1" : "0.4";
+            document.getElementById('dice-box').style.pointerEvents = isMy ? "auto" : "none";
         }
 
         function finish() {
-            const winner = scores[1] > scores[2] ? 1 : 2;
-            const winnerName = winner === 1 ? document.getElementById('label-p1').innerText : document.getElementById('label-p2').innerText;
-            
-            // تسجيل الفوز في المتصدرين (فقط للاعب الفائز)
-            if((winner === 1 && myRole === 1) || (winner === 2 && myRole === 2)) {
-                rdb.ref('leaderboard/' + winnerName).transaction(cur => (cur || 0) + 1);
-            }
-
-            document.getElementById('w-text').innerText = "🎉 الفائز: " + winnerName;
-            document.getElementById('f-score').innerText = `${scores[1]} - ${scores[2]}`;
-            document.getElementById('win-screen').style.display = 'flex';
+            const winner = scores[1]>scores[2] ? document.getElementById('label-p1').innerText : document.getElementById('label-p2').innerText;
+            document.getElementById('w-text').innerText = "🎉 الفائز: " + winner;
+            document.getElementById('f-score').innerText = `النتيجة: ${scores[1]} - ${scores[2]}`;
+            document.getElementById('win-screen').style.display='flex';
         }
     </script>
 </body>
