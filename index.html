@@ -21,6 +21,9 @@
         .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; position: absolute; z-index: 10; }
         .line { position: absolute; background: var(--empty); cursor: pointer; z-index: 5; }
         .box { position: absolute; z-index: 1; opacity: 0.8; }
+        /* إضافة ستايل للمربعات القابلة للحذف */
+        .box.can-delete { cursor: pointer; border: 2px solid gold; animation: blink 0.8s infinite; }
+        @keyframes blink { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
         #win-screen { display: none; z-index: 200; text-align: center; }
         .popup { background: #1a1f25; border: 2px solid var(--p1); padding: 10px; border-radius: 10px; position: absolute; top: 75px; z-index: 150; display: none; flex-direction: column; align-items: center; box-shadow: 0 5px 20px black; }
     </style>
@@ -78,6 +81,7 @@
         const rdb = firebase.database();
 
         let myName, roomID, myRole, turn = 1, moves = 0, scores={1:0,2:0}, total=0, over=false;
+        let isDeleteMode = false;
 
         function join() {
             myName = document.getElementById('u-name').value;
@@ -109,6 +113,7 @@
                 if(a.type === 'dice') applyDice(a);
                 else if(a.type === 'line') applyLine(a);
                 else if(a.type === 'swap') applySwap(a);
+                else if(a.type === 'destroy') applyDestroy(a);
                 else if(a.type === 'reset_req' && a.p !== myRole) document.getElementById('confirm-pop').style.display='flex';
                 else if(a.type === 'reset_ok') location.reload();
             });
@@ -130,13 +135,31 @@
 
         function roll() {
             if(turn !== myRole || moves > 0 || over) return;
-            let r = Math.floor(Math.random()*7);
+            const opts = [0, 1, 2, 3, 4, 5, 6, 'M', 'S'];
+            let r = opts[Math.floor(Math.random()*opts.length)];
             rdb.ref('actions/' + roomID).push({player:myRole, type:'dice', val:r});
         }
 
         function applyDice(a) {
-            moves = a.val; document.getElementById('dice-box').innerText = moves;
-            document.getElementById('m-text').innerText = `دور ${a.player===1?'الأخضر':'الأحمر'} (${moves})`;
+            const v = a.val;
+            document.getElementById('dice-box').innerText = v;
+            const boxesExist = document.querySelectorAll('.box').length > 0;
+
+            if(v === 'M' || v === 'S') {
+                if(!boxesExist) {
+                    document.getElementById('m-text').innerText = "لا توجد مربعات للحذف! (تخطي)";
+                    if(myRole === a.player) setTimeout(() => rdb.ref('actions/'+roomID).push({type:'swap', next:a.player===1?2:1}), 1200);
+                    return;
+                }
+                isDeleteMode = true;
+                moves = (v === 'M') ? 1 : 2;
+                document.getElementById('m-text').innerText = `قوة ${v}: اختر ${moves} مربع لحذفه!`;
+            } else {
+                isDeleteMode = false;
+                moves = parseInt(v);
+                document.getElementById('m-text').innerText = `دور ${a.player===1?'الأخضر':'الأحمر'} (${moves})`;
+            }
+
             if(moves===0 && myRole===a.player && !over) {
                 setTimeout(()=> rdb.ref('actions/' + roomID).push({type:'swap', next:a.player===1?2:1}), 800);
             }
@@ -161,7 +184,7 @@
             if(t==='h'){ l.style.width=sz+"px"; l.style.height="8px"; l.style.top=r1*sz+1+"px"; l.style.left=c1*sz+6+"px"; }
             else { l.style.width="8px"; l.style.height=sz+"px"; l.style.top=r1*sz+6+"px"; l.style.left=c1*sz+1+"px"; }
             l.id = id;
-            l.onclick = () => { if(turn===myRole && moves>0 && !l.dataset.taken && !over) rdb.ref('actions/'+roomID).push({player:myRole, type:'line', id, r1, c1, r2, c2, t}); };
+            l.onclick = () => { if(turn===myRole && moves>0 && !l.dataset.taken && !over && !isDeleteMode) rdb.ref('actions/'+roomID).push({player:myRole, type:'line', id, r1, c1, r2, c2, t}); };
             document.getElementById('game-board').appendChild(l);
         }
 
@@ -175,7 +198,7 @@
             if(!over && moves===0 && myRole===a.player) rdb.ref('actions/'+roomID).push({type:'swap', next:a.player===1?2:1});
         }
 
-        function applySwap(a) { if(over) return; turn=a.next; moves=0; document.getElementById('dice-box').innerText="🎲"; updateUI(); }
+        function applySwap(a) { if(over) return; turn=a.next; moves=0; isDeleteMode=false; document.getElementById('dice-box').innerText="🎲"; updateUI(); }
 
         function checkSq(r1,c1,r2,c2,t,pId) {
             const sz=55, poss = (t==='h')?[[r1-1,c1],[r1,c1]]:[[r1,c1-1],[r1,c1]];
@@ -187,6 +210,7 @@
                         const box = document.createElement('div'); box.id=`box-${r}-${c}`; box.className='box';
                         box.style.width=sz-4+"px"; box.style.height=sz-4+"px"; box.style.top=r*sz+8+"px"; box.style.left=c*sz+8+"px";
                         box.style.background = pId===1 ? 'var(--p1)' : 'var(--p2)';
+                        box.onclick = () => { if(isDeleteMode && turn===myRole && moves>0) rdb.ref('actions/'+roomID).push({type:'destroy', player:myRole, bid:box.id, r, c}); };
                         document.getElementById('game-board').appendChild(box);
                         scores[pId]++; total++;
                         document.getElementById('s1').innerText=scores[1]; document.getElementById('s2').innerText=scores[2];
@@ -196,16 +220,31 @@
             });
         }
 
+        function applyDestroy(a) {
+            const b = document.getElementById(a.bid); if(!b) return;
+            const pId = b.style.background.includes('rgb(0, 255, 136)') ? 1 : 2;
+            scores[pId]--; total--; b.remove();
+            const r=a.r, c=a.c;
+            const ids = [`l-${r}-${c}-${r}-${c+1}`, `l-${r+1}-${c}-${r+1}-${c+1}`, `l-${r}-${c}-${r+1}-${c}`, `l-${r}-${c+1}-${r+1}-${c+1}`];
+            ids.forEach(i => { const l=document.getElementById(i); if(l){ l.style.background='var(--empty)'; delete l.dataset.taken; }});
+            document.getElementById('s1').innerText=scores[1]; document.getElementById('s2').innerText=scores[2];
+            if(turn===a.player) moves--;
+            if(moves===0 && myRole===a.player) rdb.ref('actions/'+roomID).push({type:'swap', next:a.player===1?2:1});
+        }
+
         function updateUI() {
             const isMy = (turn===myRole);
-            document.getElementById('status').innerText = isMy ? "دورك!" : "انتظر..";
             document.getElementById('dice-box').style.opacity = isMy ? "1" : "0.4";
             document.getElementById('dice-box').style.pointerEvents = isMy ? "auto" : "none";
+            document.querySelectorAll('.box').forEach(bx => {
+                if(isMy && isDeleteMode) bx.classList.add('can-delete');
+                else bx.classList.remove('can-delete');
+            });
         }
 
         function finish() {
             const winner = scores[1]>scores[2] ? document.getElementById('label-p1').innerText : document.getElementById('label-p2').innerText;
-            document.getElementById('w-text').innerText = "🎉 الفائز: " + winner;
+            document.getElementById('w-text').innerText = (scores[1]===scores[2]) ? "تعادل!" : "🎉 الفائز: " + winner;
             document.getElementById('f-score').innerText = `النتيجة: ${scores[1]} - ${scores[2]}`;
             document.getElementById('win-screen').style.display='flex';
         }
